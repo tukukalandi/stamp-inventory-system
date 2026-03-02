@@ -1,0 +1,5 @@
+{
+  "name": "Stamp Inventory Report",
+  "description": "A high-performance interactive dashboard for analyzing philately and stamp inventory. Upload Excel/CSV files to generate instant category-wise and product-wise financial reports with automated data aggregation and visual metrics.",
+  "requestFramePermissions": []
+}

@@ -8,7 +8,8 @@ import * as XLSX from 'xlsx';
 interface ItemsReportTableProps {
   data: RawRow[];
   allData: RawRow[];
-  initialFilter?: { value: string, type: 'CATEGORY' | 'PRODUCT' } | null;
+  initialFilter?: { value: string, type: 'MAIN_CATEGORY' | 'SUB_CATEGORY' | 'PRODUCT' } | null;
+  filterFromDate?: string;
   onClearFilter?: () => void;
   onGoToOfficeWise?: () => void;
 }
@@ -27,7 +28,7 @@ interface ItemSummary {
   closingAmt: number;
 }
 
-const ItemsReportTable: React.FC<ItemsReportTableProps> = ({ data, allData, initialFilter, onClearFilter, onGoToOfficeWise }) => {
+const ItemsReportTable: React.FC<ItemsReportTableProps> = ({ data, allData, initialFilter, filterFromDate, onClearFilter, onGoToOfficeWise }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const handlePrint = () => {
@@ -39,10 +40,12 @@ const ItemsReportTable: React.FC<ItemsReportTableProps> = ({ data, allData, init
     if (!initialFilter) return { data, allData };
     
     const filterFn = (r: RawRow) => {
-      if (initialFilter.type === 'CATEGORY') {
+      if (initialFilter.type === 'SUB_CATEGORY') {
         return r.category_desc === initialFilter.value;
-      } else {
+      } else if (initialFilter.type === 'PRODUCT') {
         return r.product_category === initialFilter.value;
+      } else {
+        return r.main_category === initialFilter.value;
       }
     };
 
@@ -54,6 +57,7 @@ const ItemsReportTable: React.FC<ItemsReportTableProps> = ({ data, allData, init
 
   const reportData = useMemo(() => {
     const { data: periodData, allData: fullData } = filteredSourceData;
+    const periodDataSet = new Set(periodData);
     
     const itemDefinitions: { [key: string]: { name: string, value: number, code: any } } = {};
     fullData.forEach(row => {
@@ -91,10 +95,23 @@ const ItemsReportTable: React.FC<ItemsReportTableProps> = ({ data, allData, init
       Object.values(officeGroups).forEach(records => {
         const sorted = [...records].sort((a, b) => (a.trans_date?.getTime() || 0) - (b.trans_date?.getTime() || 0));
         
-        const officeItemOpeningQty = Number(sorted[0].opening_bal) || 0;
+        let officeItemOpeningQty = 0;
+        if (filterFromDate) {
+          const parts = filterFromDate.split('-');
+          const startDate = new Date(Date.UTC(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0));
+          const recordsBefore = sorted.filter(r => r.trans_date && r.trans_date < startDate);
+          if (recordsBefore.length > 0) {
+            officeItemOpeningQty = Number(recordsBefore[recordsBefore.length - 1].closing_bal) || 0;
+          } else {
+            officeItemOpeningQty = Number(sorted[0].opening_bal) || 0;
+          }
+        } else {
+          officeItemOpeningQty = Number(sorted[0].opening_bal) || 0;
+        }
+        
         totalOpeningQty += officeItemOpeningQty;
 
-        const periodRecordsForThisOfficeItem = sorted.filter(r => periodData.some(dr => dr === r));
+        const periodRecordsForThisOfficeItem = sorted.filter(r => periodDataSet.has(r));
         const rSum = periodRecordsForThisOfficeItem.reduce((sum, r) => sum + (Number(r.receipts) || 0), 0);
         const iSum = periodRecordsForThisOfficeItem.reduce((sum, r) => sum + (Number(r.issues) || 0), 0);
         totalReceiptsQty += rSum;

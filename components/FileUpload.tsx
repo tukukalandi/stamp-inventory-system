@@ -15,10 +15,9 @@ interface InventorySummary {
 
 interface FileUploadProps {
   onDataLoaded: (data: RawRow[], meta: ReportMetadata) => void;
-  savedSummaries?: InventorySummary[];
 }
 
-const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, savedSummaries = [] }) => {
+const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showLinkInput, setShowLinkInput] = useState(false);
@@ -73,7 +72,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, savedSummaries = 
         const workbook = XLSX.read(data, { type: 'binary' });
         workbook.SheetNames.forEach(sheetName => {
           const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: true, defval: "" }) as any[];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: "" }) as any[];
           allJsonData.push(...jsonData);
         });
       }
@@ -101,7 +100,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, savedSummaries = 
       const allJsonData: any[] = [];
       workbook.SheetNames.forEach(name => {
         const sheet = workbook.Sheets[name];
-        allJsonData.push(...XLSX.utils.sheet_to_json(sheet, { raw: true, defval: "" }));
+        allJsonData.push(...XLSX.utils.sheet_to_json(sheet, { raw: false, defval: "" }));
       });
       processAndFinalize(allJsonData);
     } catch (err: any) {
@@ -156,7 +155,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, savedSummaries = 
                   <div>
                     <p className="text-xl font-black text-slate-800 uppercase tracking-tight">Drop your inventory dump</p>
                     <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-[0.2em] max-w-[240px] leading-relaxed">
-                      We'll auto-detect offices, periods, and categories from your sheets.
+                      We'll auto-detect offices and categories from your sheets.
                     </p>
                   </div>
                 </div>
@@ -218,74 +217,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, savedSummaries = 
         )}
       </div>
 
-      {/* Database Status Side Panel */}
-      <div className="w-full lg:w-[400px] flex flex-col gap-6 animate-fadeIn">
-        <div className="bg-[#1e293b] text-white rounded-[3rem] p-8 shadow-2xl border-b-[12px] border-black/30 relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 via-cyan-500 to-indigo-500"></div>
-          
-          <div className="flex items-center gap-4 mb-8">
-            <div className="p-3 bg-emerald-500 rounded-[1rem] shadow-lg shadow-emerald-500/20 rotate-6">
-              <Database className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-lg font-black uppercase tracking-tight leading-none">Global Vault</h3>
-              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">Total Stored Context</p>
-            </div>
-          </div>
-
-          <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar">
-            {savedSummaries.length > 0 ? (
-              savedSummaries.map((summary) => (
-                <div key={summary.officeId} className="bg-slate-800/40 p-5 rounded-2xl border border-slate-700/50 hover:bg-slate-800/80 transition-all group">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-black uppercase text-emerald-400 group-hover:text-emerald-300 transition-colors">{summary.officeName}</span>
-                      <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">ID: {summary.officeId}</span>
-                    </div>
-                    <div className="px-3 py-1 bg-emerald-500/10 rounded-full text-[9px] font-black text-emerald-400 uppercase tracking-widest border border-emerald-500/20">LIVE</div>
-                  </div>
-                  <div className="flex items-center gap-3 py-2 border-y border-slate-700/30 mb-3">
-                    <Clock className="w-3.5 h-3.5 text-slate-500" />
-                    <span className="text-[10px] font-bold text-slate-300 tracking-tight">{summary.minDate} — {summary.maxDate}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Master Records</span>
-                    <span className="text-xs font-black text-white bg-slate-700 px-2 py-1 rounded-lg">{summary.rowCount}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 text-center bg-slate-800/20 rounded-[2.5rem] border-4 border-dashed border-slate-700/50">
-                <Info className="w-10 h-10 text-slate-700 mb-4" />
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] px-10 leading-relaxed">No consolidated records found in browser memory.</p>
-              </div>
-            )}
-          </div>
-          
-          <div className="mt-8 p-5 bg-slate-900/50 rounded-2xl flex items-start gap-4 border border-slate-700/30">
-             <div className="p-2.5 bg-slate-800 rounded-xl text-amber-500">
-               <Info className="w-5 h-5" />
-             </div>
-             <p className="text-[10px] font-bold text-slate-400 leading-relaxed uppercase tracking-tight">
-               Your device handles all consolidation. Data is not sent to any server. You can append new months or overwrite the global vault anytime.
-             </p>
-          </div>
-        </div>
-      </div>
-      
-      <style>{`
-        .animate-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
-        @keyframes shake {
-          10%, 90% { transform: translate3d(-1px, 0, 0); }
-          20%, 80% { transform: translate3d(2px, 0, 0); }
-          30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-          40%, 60% { transform: translate3d(4px, 0, 0); }
-        }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-      `}</style>
     </div>
   );
 };

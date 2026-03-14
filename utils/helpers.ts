@@ -20,9 +20,9 @@ export const formatNumber = (value: number): string => {
  */
 export const formatDateIndian = (date: Date | null): string => {
   if (!date || isNaN(date.getTime())) return '';
-  const d = String(date.getDate()).padStart(2, '0');
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const y = date.getFullYear();
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const y = date.getUTCFullYear();
   return `${d}.${m}.${y}`;
 };
 
@@ -79,9 +79,9 @@ export const parseDate = (val: any): Date | null => {
     }
 
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year > 1900) {
-      const d = new Date(year, month - 1, day, 0, 0, 0, 0);
+      const d = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
       // Verify date didn't roll over (e.g. Feb 31 -> Mar 3)
-      if (d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day) {
+      if (d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day) {
         return d;
       }
     }
@@ -100,6 +100,7 @@ export const normalizeData = (data: any[]): RawRow[] => {
     'denomination_value': 'denomination_value', 'denom value': 'denomination_value', 'face value': 'denomination_value', 'denomination': 'denomination_value', 'value': 'denomination_value', 'deno': 'denomination_value',
     'denomination_desc': 'denomination_desc', 'description': 'denomination_desc', 'item name': 'denomination_desc', 'name of item': 'denomination_desc', 'material description': 'denomination_desc',
     'category_desc': 'category_desc', 'category description': 'category_desc', 'category': 'category_desc',
+    'category_id': 'category_id', 'category id': 'category_id', 'cat id': 'category_id',
     'product_category': 'product_category', 'product category': 'product_category', 'product': 'product_category',
     'total': 'Total', 'grand total': 'Total', 'amount': 'Total', 'closing amount': 'Total', 'valution': 'Total', 'total value': 'Total'
   };
@@ -116,6 +117,15 @@ export const normalizeData = (data: any[]): RawRow[] => {
 
     normalized.trans_date = parseDate(normalized.trans_date);
     
+    // Fallback: If no date header matched, try the first column (as per user request)
+    if (!normalized.trans_date) {
+      const firstKey = Object.keys(row)[0];
+      if (firstKey) {
+        const fallbackDate = parseDate(row[firstKey]);
+        if (fallbackDate) normalized.trans_date = fallbackDate;
+      }
+    }
+    
     const toNum = (v: any) => {
       if (typeof v === 'string') v = v.replace(/,/g, '');
       const n = Number(v);
@@ -128,6 +138,57 @@ export const normalizeData = (data: any[]): RawRow[] => {
     normalized.closing_bal = toNum(normalized.closing_bal);
     normalized.denomination_value = toNum(normalized.denomination_value);
 
+    // Classification Logic: Map to 8 Main Categories
+    const catId = String(normalized.category_id || '').toUpperCase();
+    const catDesc = String(normalized.category_desc || '').toUpperCase();
+    const prod = String(normalized.product_category || '').toUpperCase();
+
+    if (catId.startsWith('COM') || catDesc.startsWith('COM -')) {
+      normalized.main_category = 'Commemorative';
+    } else if (catDesc.includes('DEFINITIVE') || prod.includes('DEFINITIVE')) {
+      normalized.main_category = 'Definitive-Public Postage stamp';
+    } else if (catDesc.includes('MY STAMP') || prod.includes('MY STAMP')) {
+      normalized.main_category = 'My stamp';
+    } else if (catDesc.includes('POSTAL STATIONARY') || catDesc.includes('POSTAL STATIONERY') || prod.includes('POSTAL STATIONERY')) {
+      normalized.main_category = 'Postal Stationary';
+    } else if (catDesc.includes('REVENUE') || prod.includes('REVENUE')) {
+      normalized.main_category = 'Revenue stamps';
+    } else if (catDesc.includes('SERVICE') || prod.includes('SERVICE')) {
+      normalized.main_category = 'Service Stamps';
+    } else if (catDesc.includes('GANGAJAL')) {
+      normalized.main_category = 'Gangajal';
+    } else if (catDesc.includes('MAXIM')) {
+      normalized.main_category = 'Maxim cards';
+    } else {
+      normalized.main_category = 'Others';
+    }
+
+    // Map to Product Categories (10 categories requested)
+    if (catId.startsWith('COM') || catDesc.startsWith('COM -')) {
+      if (catDesc.includes('MINIATURE SHEET')) normalized.product_category = 'Miniature Sheets';
+      else if (catDesc.includes('SHEETLET')) normalized.product_category = 'Sheetlets';
+      else if (catDesc.includes('SOUVENIR SHEET')) normalized.product_category = 'Miniature Sheets';
+      else normalized.product_category = 'Commemorative Stamps';
+    } else if (catDesc.includes('DEFINITIVE') || prod.includes('DEFINITIVE')) {
+      normalized.product_category = 'Definitive Stamps';
+    } else if (catDesc.includes('MY STAMP') || prod.includes('MY STAMP')) {
+      normalized.product_category = 'My Stamp';
+    } else if (catDesc.includes('POSTAL STATIONARY') || catDesc.includes('POSTAL STATIONERY') || prod.includes('POSTAL STATIONERY')) {
+      normalized.product_category = 'Postal Stationery';
+    } else if (catDesc.includes('REVENUE') || prod.includes('REVENUE')) {
+      normalized.product_category = 'Revenue Stamps';
+    } else if (catDesc.includes('SERVICE') || prod.includes('SERVICE')) {
+      normalized.product_category = 'Service Stamps';
+    } else if (catDesc.includes('FIRST DAY COVER') || prod.includes('FIRST DAY COVER')) {
+      normalized.product_category = 'First Day Covers';
+    } else if (catDesc.includes('RETAIL') || prod.includes('RETAIL')) {
+      normalized.product_category = 'Retail Post';
+    } else if (catDesc.includes('MINIATURE SHEET') || prod.includes('MINIATURE SHEET')) {
+      normalized.product_category = 'Miniature Sheets';
+    } else if (catDesc.includes('SHEETLET') || prod.includes('SHEETLET')) {
+      normalized.product_category = 'Sheetlets';
+    }
+
     if (normalized.Total === undefined || isNaN(normalized.Total) || Number(normalized.Total) === 0) {
       normalized.Total = normalized.closing_bal * normalized.denomination_value;
     } else {
@@ -139,10 +200,10 @@ export const normalizeData = (data: any[]): RawRow[] => {
 };
 
 export const aggregateDataByField = (
-  filteredData: RawRow[], 
-  field: keyof RawRow, 
   allData: RawRow[], 
-  startDateStr?: string
+  field: keyof RawRow, 
+  startDateStr?: string,
+  endDateStr?: string
 ): AggregatedData => {
   const result: AggregatedData = {};
   
@@ -150,7 +211,15 @@ export const aggregateDataByField = (
   if (startDateStr) {
     const parts = startDateStr.split('-');
     if (parts.length === 3) {
-      startDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0);
+      startDate = new Date(Date.UTC(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0));
+    }
+  }
+
+  let endDate: Date | null = null;
+  if (endDateStr) {
+    const parts = endDateStr.split('-');
+    if (parts.length === 3) {
+      endDate = new Date(Date.UTC(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 0, 0, 0, 0));
     }
   }
 
@@ -180,7 +249,12 @@ export const aggregateDataByField = (
       const sorted = [...records].sort((a, b) => (a.trans_date?.getTime() || 0) - (b.trans_date?.getTime() || 0));
       const faceValue = Number(sorted[0].denomination_value) || 0;
 
-      const inRangeRecords = sorted.filter(r => filteredData.some(fr => fr === r));
+      const inRangeRecords = sorted.filter(r => {
+        if (!r.trans_date) return false;
+        if (startDate && r.trans_date < startDate) return false;
+        if (endDate && r.trans_date > endDate) return false;
+        return true;
+      });
 
       let itemOpeningQty = 0;
       if (startDate) {

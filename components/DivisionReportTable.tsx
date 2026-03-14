@@ -68,10 +68,10 @@ const DivisionReportTable: React.FC<DivisionReportTableProps> = ({ data, allData
       else if (desc.includes('INLAND')) rowIndex = 3;
       else if (prod.includes('SERVICE')) rowIndex = 10;
       else if (prod.includes('MY STAMP')) rowIndex = 8;
-      else if (prod.includes('MINIATURE')) rowIndex = 5;
-      else if (prod.includes('SHEETLET')) rowIndex = 6;
+      else if (prod.includes('MINIATURE') || cat.includes('MINIATURE')) rowIndex = 5;
+      else if (prod.includes('SHEETLET') || cat.includes('SHEETLET')) rowIndex = 6;
       else if (prod.includes('DEFINITIVE')) rowIndex = 9;
-      else if (prod.includes('COMMEMORATIVE')) rowIndex = 7;
+      else if (prod.includes('COMMEMORATIVE') || cat.startsWith('COM -')) rowIndex = 7;
       else rowIndex = 11;
 
       const itemOpeningQty = Number(sorted[0].opening_bal) || 0;
@@ -132,9 +132,6 @@ const DivisionReportTable: React.FC<DivisionReportTableProps> = ({ data, allData
             </p>
             <p className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">
               Division: <span className="text-black font-black">{meta?.divisionName}</span>
-            </p>
-            <p className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">
-              Period: <span className="text-black font-black">{meta?.fromDate} to {meta?.toDate}</span>
             </p>
           </div>
         </div>

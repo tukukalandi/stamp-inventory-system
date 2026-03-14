@@ -22,6 +22,7 @@ export interface RawRow {
   category_id: any;
   category_desc: string;
   product_category: string;
+  main_category: string;
   Total: number;
   // Metadata tags
   report_period?: string;
@@ -45,10 +46,9 @@ export interface AggregatedData {
 
 export enum DashboardPage {
   UPLOAD = 'UPLOAD',
-  CATEGORY = 'CATEGORY',
-  PRODUCT = 'PRODUCT',
-  OFFICE = 'OFFICE',
-  DIVISION = 'DIVISION',
+  MAIN_CATEGORY = 'MAIN_CATEGORY',
+  SUB_CATEGORY = 'SUB_CATEGORY',
+  PRODUCT_CATEGORY = 'PRODUCT_CATEGORY',
   ITEMS = 'ITEMS'
 }
 
@@ -67,9 +67,11 @@ export const CATEGORY_LIST = [
   "COM - Event Stamps",
   "COM - Institution Stamps",
   "COM - Miniature Sheet Event St",
+  "COM - Miniature Sheet Personal",
   "COM - Miniature Sheet Thematic",
   "COM - Personality Stamps",
   "COM - Sheetlet Personality Sta",
+  "COM - Sheetlet Thematic Stamps",
   "COM - Souvenir Sheet",
   "COM - Special Covers",
   "COM - Thematic Stamps",

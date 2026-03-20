@@ -7,7 +7,11 @@ export const saveFullDataset = async (data: RawRow[], meta: ReportMetadata): Pro
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ data, meta }),
   });
-  if (!response.ok) throw new Error('Failed to save data to server');
+  
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.details || 'Failed to save data to server');
+  }
 };
 
 export const loadFullDataset = async (): Promise<{ data: RawRow[], meta: ReportMetadata | null }> => {

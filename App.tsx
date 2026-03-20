@@ -8,7 +8,7 @@ import MetricCard from './components/MetricCard';
 import OfficeReportTable from './components/OfficeReportTable';
 import DivisionReportTable from './components/DivisionReportTable';
 import ItemsReportTable from './components/ItemsReportTable';
-import { LayoutGrid, PackageSearch, BarChart3, Building2, FileBarChart, List, Trash2, Calendar, Building, Upload, Home, ShieldCheck } from 'lucide-react';
+import { LayoutGrid, PackageSearch, BarChart3, Building2, FileBarChart, List, Trash2, Calendar, Building, Upload, Home, ShieldCheck, Loader2, CheckCircle2, AlertCircle, PlusCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const MASTER_DATA_URL = "https://docs.google.com/spreadsheets/d/1sqgOjtJ5uaiI6qIG_LZMZ-D0yaUhJG_FVxZLDeQORFA/edit?gid=0#gid=0";
@@ -42,6 +42,9 @@ const App: React.FC = () => {
   const [data, setData] = useState<RawRow[]>([]);
   const [meta, setMeta] = useState<ReportMetadata | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [isAppendMode, setIsAppendMode] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<DashboardPage>(DashboardPage.UPLOAD);
   const [officeMap, setOfficeMap] = useState<OfficeMap>({});
   const [hoStructure, setHoStructure] = useState<HOStructure>({});
@@ -56,6 +59,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const map: OfficeMap = {};
     MASTER_OFFICE_LIST.forEach(o => { map[o.id] = o.name; });
+    
     const fetchMasterData = async () => {
       const csvUrl = parseGoogleSheetUrl(MASTER_DATA_URL);
       if (!csvUrl) { setOfficeMap(map); return; }
@@ -86,24 +90,74 @@ const App: React.FC = () => {
         setOfficeMap(map);
       }
     };
-    fetchMasterData();
-    setIsInitializing(false);
+
+    const init = async () => {
+      await fetchMasterData();
+      try {
+        const { data: savedData, meta: savedMeta } = await loadFullDataset();
+        if (savedData && savedData.length > 0) {
+          setData(savedData);
+          setMeta(savedMeta);
+          setCurrentPage(DashboardPage.MAIN_CATEGORY);
+          
+          // Set filters
+          const dates = savedData
+            .map(r => r.trans_date)
+            .filter((d): d is Date => d instanceof Date && !isNaN(d.getTime()))
+            .sort((a, b) => a.getTime() - b.getTime());
+          
+          if (dates.length > 0) {
+            const toISO = (d: Date) => d.toISOString().split('T')[0];
+            setFilterFromDate(toISO(dates[0]));
+            setFilterToDate(toISO(dates[dates.length - 1]));
+          }
+        }
+      } catch (e) {
+        console.error("Failed to load saved data", e);
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    init();
   }, []);
 
-  const handleDataLoaded = (newData: RawRow[], newMeta: ReportMetadata) => {
-    setData(newData);
-    setMeta(newMeta);
+  const handleDataLoaded = async (newData: RawRow[], newMeta: ReportMetadata) => {
+    const combinedData = isAppendMode ? [...data, ...newData] : newData;
+    setData(combinedData);
     
-    // Set initial filters from detected range
-    const dates = newData
+    // Recalculate meta for combined data
+    const dates = combinedData
       .map(r => r.trans_date)
       .filter((d): d is Date => d instanceof Date && !isNaN(d.getTime()))
       .sort((a, b) => a.getTime() - b.getTime());
+
+    const finalMeta: ReportMetadata = {
+      ...newMeta,
+      fromDate: dates.length > 0 ? formatDateIndian(dates[0]) : 'N/A',
+      toDate: dates.length > 0 ? formatDateIndian(dates[dates.length - 1]) : 'N/A',
+      periodName: isAppendMode ? 'Combined Report' : newMeta.periodName
+    };
     
+    setMeta(finalMeta);
+    setIsAppendMode(false); // Reset mode
+    
+    // Set initial filters from detected range
     if (dates.length > 0) {
       const toISO = (d: Date) => d.toISOString().split('T')[0];
       setFilterFromDate(toISO(dates[0]));
       setFilterToDate(toISO(dates[dates.length - 1]));
+    }
+
+    setSyncStatus('SYNCING');
+    setSyncError(null);
+    try {
+      await saveFullDataset(combinedData, finalMeta);
+      setSyncStatus('SUCCESS');
+    } catch (e: any) {
+      console.error("Failed to save data to Supabase", e);
+      setSyncStatus('ERROR');
+      setSyncError(e.message);
     }
 
     setCurrentPage(DashboardPage.MAIN_CATEGORY);
@@ -163,7 +217,7 @@ const App: React.FC = () => {
     if (currentPage === DashboardPage.UPLOAD) {
       return (
         <div className="flex flex-col items-center justify-center py-12 animate-fadeIn">
-          <FileUpload onDataLoaded={handleDataLoaded} />
+          <FileUpload onDataLoaded={handleDataLoaded} isAppendMode={isAppendMode} />
         </div>
       );
     }
@@ -262,7 +316,57 @@ const App: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button onClick={() => setCurrentPage(DashboardPage.UPLOAD)} className="flex items-center gap-2 px-4 py-2 bg-[#ffcc00] text-[#c1272d] rounded-xl text-xs font-black uppercase shadow-lg hover:bg-white transition-all group">
+            {syncStatus === 'SYNCING' && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-lg text-[10px] font-bold text-white uppercase animate-pulse">
+                <Loader2 className="w-3 h-3 animate-spin" /> Syncing...
+              </div>
+            )}
+            {syncStatus === 'SUCCESS' && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 uppercase">
+                <CheckCircle2 className="w-3 h-3" /> Cloud Synced
+              </div>
+            )}
+            {syncStatus === 'ERROR' && (
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/20 rounded-lg text-[10px] font-bold text-rose-400 uppercase">
+                  <AlertCircle className="w-3 h-3" /> Sync Failed
+                </div>
+                <span className="text-[9px] text-rose-300 font-medium max-w-[200px] text-right leading-tight">
+                  {syncError || 'Connection Error'}
+                </span>
+              </div>
+            )}
+            <button 
+              onClick={async () => {
+                if (window.confirm('WARNING: This will permanently delete all inventory data from the database. Are you sure?')) {
+                  try {
+                    setSyncStatus('SYNCING');
+                    await clearInventoryData();
+                    setData([]);
+                    setMeta(null);
+                    setSyncStatus('IDLE');
+                    setCurrentPage(DashboardPage.UPLOAD);
+                  } catch (e: any) {
+                    console.error("Failed to clear data", e);
+                    setSyncStatus('ERROR');
+                    setSyncError(e.message);
+                  }
+                }
+              }} 
+              className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-black uppercase hover:bg-rose-700 transition-all shadow-lg shadow-rose-900/20 group"
+            >
+              <Trash2 className="w-4 h-4 group-hover:rotate-12 transition-transform" /> Delete All Data
+            </button>
+            <button 
+              onClick={() => {
+                setIsAppendMode(true);
+                setCurrentPage(DashboardPage.UPLOAD);
+              }} 
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase shadow-lg hover:bg-emerald-700 transition-all group"
+            >
+              <PlusCircle className="w-4 h-4 group-hover:scale-110 transition-transform" /> Append Data
+            </button>
+            <button onClick={() => { setIsAppendMode(false); setCurrentPage(DashboardPage.UPLOAD); }} className="flex items-center gap-2 px-4 py-2 bg-[#ffcc00] text-[#c1272d] rounded-xl text-xs font-black uppercase shadow-lg hover:bg-white transition-all group">
               <Upload className="w-4 h-4 group-hover:-translate-y-1 transition-transform" /> New Upload
             </button>
           </div>

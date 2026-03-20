@@ -2,7 +2,7 @@
 import React, { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { RawRow, ReportMetadata, MASTER_OFFICE_LIST } from '../types';
-import { Upload, AlertCircle, Link, Globe, Files, Loader2, CheckCircle2, Database, Info, Clock, Sparkles } from 'lucide-react';
+import { Upload, AlertCircle, Link, Globe, Files, Loader2, CheckCircle2, Database, Info, Clock, Sparkles, PlusCircle } from 'lucide-react';
 import { parseGoogleSheetUrl, normalizeData, formatDateIndian } from '../utils/helpers';
 
 interface InventorySummary {
@@ -15,9 +15,10 @@ interface InventorySummary {
 
 interface FileUploadProps {
   onDataLoaded: (data: RawRow[], meta: ReportMetadata) => void;
+  isAppendMode?: boolean;
 }
 
-const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
+const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, isAppendMode }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showLinkInput, setShowLinkInput] = useState(false);
@@ -120,12 +121,19 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded }) => {
           <div className="inline-flex items-center justify-center w-24 h-24 bg-[#c1272d] text-white rounded-[2rem] mb-6 shadow-2xl ring-8 ring-[#ffcc00]/20 rotate-3 hover:rotate-0 transition-transform duration-500">
             {loading ? <Loader2 className="w-12 h-12 animate-spin" /> : <Upload className="w-12 h-12" />}
           </div>
-          <h2 className="text-4xl font-black text-[#c1272d] uppercase tracking-tighter leading-none">Instant Consolidation</h2>
+          <h2 className="text-4xl font-black text-[#c1272d] uppercase tracking-tighter leading-none">
+            {isAppendMode ? 'Add More Data' : 'Instant Consolidation'}
+          </h2>
           <p className="text-slate-400 font-bold uppercase text-[10px] tracking-[0.4em] mt-3 flex items-center justify-center gap-2">
             <Sparkles className="w-3 h-3 text-[#ffcc00]" />
-            Direct Multi-Office Upload
+            {isAppendMode ? 'Appending to Current Dataset' : 'Direct Multi-Office Upload'}
             <Sparkles className="w-3 h-3 text-[#ffcc00]" />
           </p>
+          {isAppendMode && (
+            <div className="mt-4 inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[9px] font-black uppercase tracking-wider animate-bounce">
+              <PlusCircle className="w-3 h-3" /> Append Mode Active
+            </div>
+          )}
         </div>
 
         <div className="w-full space-y-5 relative z-10">

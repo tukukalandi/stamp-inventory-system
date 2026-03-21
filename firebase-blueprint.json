@@ -1,0 +1,31 @@
+{
+  "entities": {
+    "InventoryData": {
+      "title": "Inventory Data",
+      "description": "Stores stamp inventory reports and metadata.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "description": "The actual inventory report data (JSON)."
+        },
+        "meta": {
+          "type": "object",
+          "description": "Metadata about the report (e.g., source, timestamp)."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the report was saved."
+        }
+      },
+      "required": ["data", "created_at"]
+    }
+  },
+  "firestore": {
+    "/inventory_data/{reportId}": {
+      "schema": "InventoryData",
+      "description": "Collection of inventory reports."
+    }
+  }
+}

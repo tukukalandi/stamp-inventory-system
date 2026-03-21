@@ -1,0 +1,33 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "tukukalandi@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // Inventory Data Rules
+    match /inventory_data/{reportId} {
+      // Allow anyone to read for now (or restrict to authenticated users)
+      allow read: if true;
+      
+      // Allow creation and updates
+      allow create, update: if true; // For now, allow all to test sync
+      
+      // Restrict delete to admins
+      allow delete: if isAdmin();
+    }
+    
+    // User Profile Rules
+    match /users/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+  }
+}

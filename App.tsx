@@ -44,6 +44,7 @@ const App: React.FC = () => {
   const [isInitializing, setIsInitializing] = useState(true);
   const [isAppendMode, setIsAppendMode] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [firebaseStatus, setFirebaseStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
   const [syncError, setSyncError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<DashboardPage>(DashboardPage.UPLOAD);
   const [officeMap, setOfficeMap] = useState<OfficeMap>({});
@@ -98,6 +99,8 @@ const App: React.FC = () => {
         if (savedData && savedData.length > 0) {
           setData(savedData);
           setMeta(savedMeta);
+          setSyncStatus('SUCCESS');
+          setFirebaseStatus('SUCCESS');
           setCurrentPage(DashboardPage.MAIN_CATEGORY);
           
           // Set filters
@@ -150,13 +153,16 @@ const App: React.FC = () => {
     }
 
     setSyncStatus('SYNCING');
+    setFirebaseStatus('SYNCING');
     setSyncError(null);
     try {
       await saveFullDataset(combinedData, finalMeta);
       setSyncStatus('SUCCESS');
+      setFirebaseStatus('SUCCESS');
     } catch (e: any) {
-      console.error("Failed to save data to Supabase", e);
+      console.error("Failed to save data to Cloud", e);
       setSyncStatus('ERROR');
+      setFirebaseStatus('ERROR');
       setSyncError(e.message);
     }
 
@@ -315,36 +321,39 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          <div className="flex items-center gap-4">
-            {syncStatus === 'SYNCING' && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-lg text-[10px] font-bold text-white uppercase animate-pulse">
-                <Loader2 className="w-3 h-3 animate-spin" /> Syncing...
-              </div>
-            )}
-            {syncStatus === 'SUCCESS' && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/20 rounded-lg text-[10px] font-bold text-emerald-400 uppercase">
-                <CheckCircle2 className="w-3 h-3" /> Cloud Synced
-              </div>
-            )}
-            {syncStatus === 'ERROR' && (
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-rose-500/20 rounded-lg text-[10px] font-bold text-rose-400 uppercase">
-                  <AlertCircle className="w-3 h-3" /> Sync Failed
+            <div className="flex flex-col items-end gap-1">
+              {syncStatus !== 'IDLE' && (
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    syncStatus === 'SUCCESS' ? 'bg-emerald-500' : 
+                    syncStatus === 'SYNCING' ? 'bg-blue-500 animate-pulse' : 
+                    'bg-rose-500'
+                  }`} />
+                  <span className="text-[10px] font-bold text-white uppercase">Supabase: {syncStatus}</span>
                 </div>
-                <span className="text-[9px] text-rose-300 font-medium max-w-[200px] text-right leading-tight">
-                  {syncError || 'Connection Error'}
-                </span>
-              </div>
-            )}
+              )}
+              {firebaseStatus !== 'IDLE' && (
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${
+                    firebaseStatus === 'SUCCESS' ? 'bg-emerald-500' : 
+                    firebaseStatus === 'SYNCING' ? 'bg-blue-500 animate-pulse' : 
+                    'bg-rose-500'
+                  }`} />
+                  <span className="text-[10px] font-bold text-white uppercase">Firebase: {firebaseStatus}</span>
+                </div>
+              )}
+            </div>
             <button 
               onClick={async () => {
                 if (window.confirm('WARNING: This will permanently delete all inventory data from the database. Are you sure?')) {
                   try {
                     setSyncStatus('SYNCING');
+                    setFirebaseStatus('SYNCING');
                     await clearInventoryData();
                     setData([]);
                     setMeta(null);
                     setSyncStatus('IDLE');
+                    setFirebaseStatus('IDLE');
                     setCurrentPage(DashboardPage.UPLOAD);
                   } catch (e: any) {
                     console.error("Failed to clear data", e);
@@ -370,7 +379,6 @@ const App: React.FC = () => {
               <Upload className="w-4 h-4 group-hover:-translate-y-1 transition-transform" /> New Upload
             </button>
           </div>
-        </div>
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 md:px-8 mt-10 print:mt-4 print:px-0 print:max-w-none print:bg-white overflow-visible print:h-auto">

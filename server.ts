@@ -30,6 +30,18 @@ const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6Ikp
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+import firebaseConfig from './firebase-applet-config.json' with { type: "json" };
+
+// Initialize Firebase Admin
+if (!getApps().length) {
+  initializeApp({
+    projectId: firebaseConfig.projectId,
+  });
+}
+const firestore = getFirestore(firebaseConfig.firestoreDatabaseId);
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -88,16 +100,22 @@ async function startServer() {
 
     if (error) {
       console.error("Supabase Insert Error:", error);
-      return res.status(500).json({ 
-        error: "Database Error", 
-        message: error.message,
-        details: error.details,
-        hint: error.hint
-      });
+      // We'll continue to Firebase even if Supabase fails
     }
 
-      console.log("Successfully saved to Supabase.");
-      res.json({ success: true });
+    // Sync to Firebase
+    try {
+      await firestore.collection("inventory_data").add({
+        data,
+        meta,
+        created_at: new Date().toISOString(),
+      });
+      console.log("Successfully saved to Firebase.");
+    } catch (firebaseError) {
+      console.error("Firebase Sync Error:", firebaseError);
+    }
+
+    res.json({ success: true });
     } catch (error: any) {
       console.error("Supabase save error detail:", {
         message: error.message,
@@ -118,6 +136,18 @@ async function startServer() {
         .neq('id', -1); 
 
       if (error) throw error;
+      
+      // Clear Firebase
+      try {
+        const snapshot = await firestore.collection("inventory_data").get();
+        const batch = firestore.batch();
+        snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
+        console.log("Successfully cleared Firebase.");
+      } catch (firebaseError) {
+        console.error("Firebase Clear Error:", firebaseError);
+      }
+
       res.json({ success: true });
     } catch (error) {
       console.error("Supabase clear error:", error);

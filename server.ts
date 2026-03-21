@@ -13,7 +13,7 @@ const __dirname = path.dirname(__filename);
 // Supabase Configuration
 // Note: In production, set these in your environment variables.
 const supabaseUrl = process.env.SUPABASE_URL || 'https://ncnwvmcfcslxrvsqbyxo.supabase.co';
-const supabaseKey = process.env.SUPABASE_KEY || 'sb_publishable_n3aIC0sD38ZUGzd9r9UsZQ_mr_SnMeU';
+const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jbnd2bWNmY3NseHJ2c3FieXhvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwMjAxMjEsImV4cCI6MjA4OTU5NjEyMX0.20kpuSofYLl_5j-c3bG125-2ksYCHhzyfk750UoQ7hY';
 
 /**
  * Supabase Table Schema:

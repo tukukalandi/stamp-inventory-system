@@ -1,8 +1,5 @@
 
 import React, { useState, useMemo, useEffect, useDeferredValue } from 'react';
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { auth } from './src/firebase';
-import Login from './src/components/Login';
 import DashboardOverview from './src/components/DashboardOverview';
 import { motion, AnimatePresence } from 'motion/react';
 import { RawRow, DashboardPage, CATEGORY_LIST, PRODUCT_LIST, OfficeMap, HOStructure, MetricGroup, ReportMetadata, MASTER_OFFICE_LIST } from './types';
@@ -44,7 +41,6 @@ interface InventorySummary {
 }
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
   const [data, setData] = useState<RawRow[]>([]);
   const [meta, setMeta] = useState<ReportMetadata | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -64,15 +60,6 @@ const App: React.FC = () => {
   const deferredToDate = useDeferredValue(filterToDate);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        init();
-      } else {
-        setIsInitializing(false);
-      }
-    });
-
     const map: OfficeMap = {};
     MASTER_OFFICE_LIST.forEach(o => { map[o.id] = o.name; });
     
@@ -137,7 +124,7 @@ const App: React.FC = () => {
       }
     };
 
-    return () => unsubscribe();
+    init();
   }, []);
 
   const handleDataLoaded = async (newData: RawRow[], newMeta: ReportMetadata) => {
@@ -327,10 +314,6 @@ const App: React.FC = () => {
     return <div className="min-h-screen flex items-center justify-center bg-[#fffcf0]"><BarChart3 className="w-12 h-12 text-[#c1272d] animate-bounce" /></div>;
   }
 
-  if (!user) {
-    return <Login />;
-  }
-
   return (
     <div className="min-h-screen bg-[#fffcf0] pb-12 print:bg-white print:pb-0 print:h-auto print:overflow-visible">
       <nav className="sticky top-0 z-50 bg-[#c1272d] border-b-4 border-[#ffcc00] shadow-md px-4 md:px-8 py-3 print:hidden">
@@ -386,19 +369,6 @@ const App: React.FC = () => {
 
             <div className="h-8 w-px bg-white/20 mx-2" />
 
-            <div className="flex items-center gap-3">
-              <div className="text-right hidden sm:block">
-                <p className="text-[10px] font-black text-white uppercase leading-none">{user.displayName}</p>
-                <p className="text-[8px] font-bold text-[#ffcc00] uppercase tracking-widest">{user.email}</p>
-              </div>
-              <button 
-                onClick={() => signOut(auth)}
-                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all"
-                title="Logout"
-              >
-                <ShieldCheck className="w-4 h-4" />
-              </button>
-            </div>
             <button 
               onClick={async () => {
                 if (window.confirm('WARNING: This will permanently delete all inventory data from the database. Are you sure?')) {

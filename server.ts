@@ -86,10 +86,15 @@ async function startServer() {
         .from('inventory_data')
         .insert([{ data, meta, created_at: new Date().toISOString() }]);
 
-      if (error) {
-        console.error("Supabase Insert Error:", error);
-        throw error;
-      }
+    if (error) {
+      console.error("Supabase Insert Error:", error);
+      return res.status(500).json({ 
+        error: "Database Error", 
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      });
+    }
 
       console.log("Successfully saved to Supabase.");
       res.json({ success: true });
@@ -135,12 +140,17 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  // Only listen if not on Vercel
+  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 
   return app;
 }
 
-const appPromise = startServer();
-export default appPromise;
+// For Vercel, we export the app instance. 
+// Since startServer is async, we handle it carefully.
+const app = await startServer();
+export default app;

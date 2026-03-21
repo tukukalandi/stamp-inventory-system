@@ -1,5 +1,10 @@
 
 import React, { useState, useMemo, useEffect, useDeferredValue } from 'react';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { auth } from './src/firebase';
+import Login from './src/components/Login';
+import DashboardOverview from './src/components/DashboardOverview';
+import { motion, AnimatePresence } from 'motion/react';
 import { RawRow, DashboardPage, CATEGORY_LIST, PRODUCT_LIST, OfficeMap, HOStructure, MetricGroup, ReportMetadata, MASTER_OFFICE_LIST } from './types';
 import { aggregateDataByField, parseGoogleSheetUrl, formatDateIndian } from './utils/helpers';
 import { loadFullDataset, saveFullDataset, clearInventoryData } from './utils/db';
@@ -39,6 +44,7 @@ interface InventorySummary {
 }
 
 const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
   const [data, setData] = useState<RawRow[]>([]);
   const [meta, setMeta] = useState<ReportMetadata | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -58,6 +64,15 @@ const App: React.FC = () => {
   const deferredToDate = useDeferredValue(filterToDate);
 
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        init();
+      } else {
+        setIsInitializing(false);
+      }
+    });
+
     const map: OfficeMap = {};
     MASTER_OFFICE_LIST.forEach(o => { map[o.id] = o.name; });
     
@@ -101,7 +116,7 @@ const App: React.FC = () => {
           setMeta(savedMeta);
           setSyncStatus('SUCCESS');
           setFirebaseStatus('SUCCESS');
-          setCurrentPage(DashboardPage.MAIN_CATEGORY);
+          setCurrentPage(DashboardPage.OVERVIEW);
           
           // Set filters
           const dates = savedData
@@ -122,7 +137,7 @@ const App: React.FC = () => {
       }
     };
 
-    init();
+    return () => unsubscribe();
   }, []);
 
   const handleDataLoaded = async (newData: RawRow[], newMeta: ReportMetadata) => {
@@ -166,7 +181,7 @@ const App: React.FC = () => {
       setSyncError(e.message);
     }
 
-    setCurrentPage(DashboardPage.MAIN_CATEGORY);
+    setCurrentPage(DashboardPage.OVERVIEW);
   };
 
   const filteredData = useMemo(() => {
@@ -222,68 +237,88 @@ const App: React.FC = () => {
   const renderContent = () => {
     if (currentPage === DashboardPage.UPLOAD) {
       return (
-        <div className="flex flex-col items-center justify-center py-12 animate-fadeIn">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center justify-center py-12"
+        >
           <FileUpload onDataLoaded={handleDataLoaded} isAppendMode={isAppendMode} />
-        </div>
+        </motion.div>
       );
     }
     if (data.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-100">
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-col items-center justify-center py-20 bg-white rounded-[3rem] border-4 border-dashed border-slate-100"
+        >
           <Upload className="w-16 h-16 text-slate-200 mb-4" />
           <p className="text-slate-400 font-black uppercase tracking-widest text-xs">No consolidated data. Please upload records.</p>
-          <button onClick={() => setCurrentPage(DashboardPage.UPLOAD)} className="mt-4 px-6 py-3 bg-[#c1272d] text-white rounded-xl font-bold uppercase text-xs">Start Upload</button>
-        </div>
+          <button onClick={() => setCurrentPage(DashboardPage.UPLOAD)} className="mt-4 px-8 py-4 bg-[#c1272d] text-white rounded-2xl font-black uppercase text-xs shadow-xl shadow-red-100 hover:bg-black transition-all">Start Upload</button>
+        </motion.div>
       );
     }
     return (
       <div className={`transition-opacity duration-300 ${isStale ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-        {(() => {
-          switch (currentPage) {
-            case DashboardPage.ITEMS:
-              return <ItemsReportTable 
-                data={filteredData} 
-                allData={data} 
-                initialFilter={activeFilter} 
-                filterFromDate={deferredFromDate}
-                onClearFilter={() => setActiveFilter(null)} 
-                onGoToOfficeWise={() => {}}
-              />;
-            case DashboardPage.PRODUCT_CATEGORY:
-              return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-fadeIn print:grid-cols-2 print:gap-4">
-                  {PRODUCT_LIST.map((item, index) => {
-                    const metrics = productAggregated[item] || { openingQty: 0, openingAmt: 0, issuesQty: 0, issuesAmt: 0, receiptsQty: 0, receiptsAmt: 0, closingQty: 0, closingAmt: 0 };
-                    return <MetricCard key={item} title={item} metrics={metrics} colorScheme={DASHBOARD_COLORS[index % DASHBOARD_COLORS.length]} onClick={() => handleProductCardClick(item)} />;
-                  })}
-                </div>
-              );
-            case DashboardPage.SUB_CATEGORY:
-              const subCategories = Array.from(new Set(filteredData.filter(r => r.main_category === selectedMainCategory).map(r => r.category_desc))).sort() as string[];
-              return (
-                <div className="flex flex-col gap-6">
-                  <button onClick={() => setCurrentPage(DashboardPage.MAIN_CATEGORY)} className="flex items-center gap-2 text-[#c1272d] font-black uppercase text-xs hover:underline">
-                    ← Back to Main Categories
-                  </button>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-fadeIn">
-                    {subCategories.map((item, index) => {
-                      const metrics = subCategoryAggregated[item] || { openingQty: 0, openingAmt: 0, issuesQty: 0, issuesAmt: 0, receiptsQty: 0, receiptsAmt: 0, closingQty: 0, closingAmt: 0 };
-                      return <MetricCard key={item} title={item} metrics={metrics} colorScheme={DASHBOARD_COLORS[index % DASHBOARD_COLORS.length]} onClick={() => handleSubCardClick(item)} />;
-                    })}
-                  </div>
-                </div>
-              );
-            default:
-              return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-fadeIn print:grid-cols-2 print:gap-4">
-                  {MAIN_CATEGORIES.map((item, index) => {
-                    const metrics = mainCategoryAggregated[item] || { openingQty: 0, openingAmt: 0, issuesQty: 0, issuesAmt: 0, receiptsQty: 0, receiptsAmt: 0, closingQty: 0, closingAmt: 0 };
-                    return <MetricCard key={item} title={item} metrics={metrics} colorScheme={DASHBOARD_COLORS[index % DASHBOARD_COLORS.length]} onClick={() => handleMainCardClick(item)} />;
-                  })}
-                </div>
-              );
-          }
-        })()}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentPage}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+          >
+            {(() => {
+              switch (currentPage) {
+                case DashboardPage.OVERVIEW:
+                  return <DashboardOverview mainCategoryAggregated={mainCategoryAggregated} netValuation={netValuation} />;
+                case DashboardPage.ITEMS:
+                  return <ItemsReportTable 
+                    data={filteredData} 
+                    allData={data} 
+                    initialFilter={activeFilter} 
+                    filterFromDate={deferredFromDate}
+                    onClearFilter={() => setActiveFilter(null)} 
+                    onGoToOfficeWise={() => {}}
+                  />;
+                case DashboardPage.PRODUCT_CATEGORY:
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 print:grid-cols-2 print:gap-4">
+                      {PRODUCT_LIST.map((item, index) => {
+                        const metrics = productAggregated[item] || { openingQty: 0, openingAmt: 0, issuesQty: 0, issuesAmt: 0, receiptsQty: 0, receiptsAmt: 0, closingQty: 0, closingAmt: 0 };
+                        return <MetricCard key={item} title={item} metrics={metrics} colorScheme={DASHBOARD_COLORS[index % DASHBOARD_COLORS.length]} onClick={() => handleProductCardClick(item)} />;
+                      })}
+                    </div>
+                  );
+                case DashboardPage.SUB_CATEGORY:
+                  const subCategories = Array.from(new Set(filteredData.filter(r => r.main_category === selectedMainCategory).map(r => r.category_desc))).sort() as string[];
+                  return (
+                    <div className="flex flex-col gap-6">
+                      <button onClick={() => setCurrentPage(DashboardPage.MAIN_CATEGORY)} className="flex items-center gap-2 text-[#c1272d] font-black uppercase text-xs hover:underline">
+                        ← Back to Main Categories
+                      </button>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {subCategories.map((item, index) => {
+                          const metrics = subCategoryAggregated[item] || { openingQty: 0, openingAmt: 0, issuesQty: 0, issuesAmt: 0, receiptsQty: 0, receiptsAmt: 0, closingQty: 0, closingAmt: 0 };
+                          return <MetricCard key={item} title={item} metrics={metrics} colorScheme={DASHBOARD_COLORS[index % DASHBOARD_COLORS.length]} onClick={() => handleSubCardClick(item)} />;
+                        })}
+                      </div>
+                    </div>
+                  );
+                default:
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 print:grid-cols-2 print:gap-4">
+                      {MAIN_CATEGORIES.map((item, index) => {
+                        const metrics = mainCategoryAggregated[item] || { openingQty: 0, openingAmt: 0, issuesQty: 0, issuesAmt: 0, receiptsQty: 0, receiptsAmt: 0, closingQty: 0, closingAmt: 0 };
+                        return <MetricCard key={item} title={item} metrics={metrics} colorScheme={DASHBOARD_COLORS[index % DASHBOARD_COLORS.length]} onClick={() => handleMainCardClick(item)} />;
+                      })}
+                    </div>
+                  );
+              }
+            })()}
+          </motion.div>
+        </AnimatePresence>
       </div>
     );
   };
@@ -292,11 +327,15 @@ const App: React.FC = () => {
     return <div className="min-h-screen flex items-center justify-center bg-[#fffcf0]"><BarChart3 className="w-12 h-12 text-[#c1272d] animate-bounce" /></div>;
   }
 
+  if (!user) {
+    return <Login />;
+  }
+
   return (
     <div className="min-h-screen bg-[#fffcf0] pb-12 print:bg-white print:pb-0 print:h-auto print:overflow-visible">
       <nav className="sticky top-0 z-50 bg-[#c1272d] border-b-4 border-[#ffcc00] shadow-md px-4 md:px-8 py-3 print:hidden">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
-          <button onClick={() => setCurrentPage(DashboardPage.UPLOAD)} className="flex items-center gap-3 group transition-all hover:scale-105">
+          <button onClick={() => setCurrentPage(DashboardPage.OVERVIEW)} className="flex items-center gap-3 group transition-all hover:scale-105">
             <div className="p-2 bg-[#ffcc00] rounded-full text-[#c1272d] shadow-inner group-hover:rotate-12 transition-transform">
               <BarChart3 className="w-6 h-6" />
             </div>
@@ -311,6 +350,7 @@ const App: React.FC = () => {
               <Home className="w-3.5 h-3.5" /> Home
             </button>
             {data.length > 0 && [
+              { id: DashboardPage.OVERVIEW, label: 'Overview', icon: <BarChart3 className="w-3.5 h-3.5" /> },
               { id: DashboardPage.MAIN_CATEGORY, label: 'Categories', icon: <LayoutGrid className="w-3.5 h-3.5" /> },
               { id: DashboardPage.PRODUCT_CATEGORY, label: 'Product Category', icon: <PackageSearch className="w-3.5 h-3.5" /> },
               { id: DashboardPage.ITEMS, label: 'Full Items List', icon: <List className="w-3.5 h-3.5" /> },
@@ -342,6 +382,22 @@ const App: React.FC = () => {
                   <span className="text-[10px] font-bold text-white uppercase">Firebase: {firebaseStatus}</span>
                 </div>
               )}
+            </div>
+
+            <div className="h-8 w-px bg-white/20 mx-2" />
+
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <p className="text-[10px] font-black text-white uppercase leading-none">{user.displayName}</p>
+                <p className="text-[8px] font-bold text-[#ffcc00] uppercase tracking-widest">{user.email}</p>
+              </div>
+              <button 
+                onClick={() => signOut(auth)}
+                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all"
+                title="Logout"
+              >
+                <ShieldCheck className="w-4 h-4" />
+              </button>
             </div>
             <button 
               onClick={async () => {
@@ -393,7 +449,8 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <h2 className="text-4xl font-black text-[#c1272d] tracking-tight uppercase print:text-black print:text-2xl print:m-0 print:text-center">
-                  {currentPage === DashboardPage.MAIN_CATEGORY ? 'Main Categories' : 
+                  {currentPage === DashboardPage.OVERVIEW ? 'Dashboard Overview' :
+                   currentPage === DashboardPage.MAIN_CATEGORY ? 'Main Categories' : 
                    currentPage === DashboardPage.PRODUCT_CATEGORY ? 'Product Categories' :
                    currentPage === DashboardPage.SUB_CATEGORY ? `Commemorative Sub-Categories` : 
                    currentPage === DashboardPage.ITEMS ? 'Detailed Items Summary' : 'Report View'}

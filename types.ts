@@ -46,6 +46,7 @@ export interface AggregatedData {
 
 export enum DashboardPage {
   UPLOAD = 'UPLOAD',
+  OVERVIEW = 'OVERVIEW',
   MAIN_CATEGORY = 'MAIN_CATEGORY',
   SUB_CATEGORY = 'SUB_CATEGORY',
   PRODUCT_CATEGORY = 'PRODUCT_CATEGORY',

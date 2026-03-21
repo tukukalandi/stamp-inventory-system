@@ -140,8 +140,8 @@ async function startServer() {
     });
   }
 
-  // Only listen if not on Vercel
-  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  // Only listen if not on Vercel or Netlify
+  if (process.env.NODE_ENV !== "production" || (!process.env.VERCEL && !process.env.NETLIFY)) {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });

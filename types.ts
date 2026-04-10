@@ -50,7 +50,8 @@ export enum DashboardPage {
   MAIN_CATEGORY = 'MAIN_CATEGORY',
   SUB_CATEGORY = 'SUB_CATEGORY',
   PRODUCT_CATEGORY = 'PRODUCT_CATEGORY',
-  ITEMS = 'ITEMS'
+  ITEMS = 'ITEMS',
+  OFFICE_WISE = 'OFFICE_WISE'
 }
 
 export interface OfficeMap {

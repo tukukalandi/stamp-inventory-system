@@ -102,18 +102,22 @@ export const normalizeData = (data: any[]): RawRow[] => {
     'category_desc': 'category_desc', 'category description': 'category_desc', 'category': 'category_desc',
     'category_id': 'category_id', 'category id': 'category_id', 'cat id': 'category_id',
     'product_category': 'product_category', 'product category': 'product_category', 'product': 'product_category',
-    'total': 'Total', 'grand total': 'Total', 'amount': 'Total', 'closing amount': 'Total', 'valution': 'Total', 'total value': 'Total'
+    'total': 'Total', 'grand total': 'Total', 'amount': 'Total', 'closing amount': 'Total', 'valution': 'Total', 'total value': 'Total',
+    'office code': 'office_id', 'office name': 'office_name', 'unit id': 'office_id', 'unit name': 'office_name', 'customer id': 'office_id', 'customer name': 'office_name'
   };
 
   return data.map(row => {
     const normalized: any = {};
-    normalized.office_id = row.office_id || row['Office ID'] || row['Customer ID'] || row['Office'] || 'Unknown';
     
     Object.keys(row).forEach(key => {
       const lowerKey = key.toLowerCase().trim();
       const targetKey = mapping[lowerKey];
       if (targetKey) normalized[targetKey] = row[key];
     });
+
+    // Ensure office_id is a string and trimmed
+    normalized.office_id = String(normalized.office_id || row.office_id || row['Office ID'] || row['Customer ID'] || row['Office'] || row['Office Code'] || row['Unit ID'] || 'Unknown').trim();
+    if (normalized.office_id === 'undefined' || normalized.office_id === 'null') normalized.office_id = 'Unknown';
 
     normalized.trans_date = parseDate(normalized.trans_date);
     
@@ -143,7 +147,9 @@ export const normalizeData = (data: any[]): RawRow[] => {
     const catDesc = String(normalized.category_desc || '').toUpperCase();
     const prod = String(normalized.product_category || '').toUpperCase();
 
-    if (catId.startsWith('COM') || catDesc.startsWith('COM -')) {
+    const isCommemorative = catId.startsWith('COM') || catDesc.includes('COMMEMORATIVE') || catDesc.startsWith('COM');
+
+    if (isCommemorative) {
       normalized.main_category = 'Commemorative';
     } else if (catDesc.includes('DEFINITIVE') || prod.includes('DEFINITIVE')) {
       normalized.main_category = 'Definitive-Public Postage stamp';
@@ -164,7 +170,7 @@ export const normalizeData = (data: any[]): RawRow[] => {
     }
 
     // Map to Product Categories (10 categories requested)
-    if (catId.startsWith('COM') || catDesc.startsWith('COM -')) {
+    if (isCommemorative) {
       if (catDesc.includes('MINIATURE SHEET')) normalized.product_category = 'Miniature Sheets';
       else if (catDesc.includes('SHEETLET')) normalized.product_category = 'Sheetlets';
       else if (catDesc.includes('SOUVENIR SHEET')) normalized.product_category = 'Miniature Sheets';
@@ -187,6 +193,8 @@ export const normalizeData = (data: any[]): RawRow[] => {
       normalized.product_category = 'Miniature Sheets';
     } else if (catDesc.includes('SHEETLET') || prod.includes('SHEETLET')) {
       normalized.product_category = 'Sheetlets';
+    } else {
+      normalized.product_category = 'Others';
     }
 
     if (normalized.Total === undefined || isNaN(normalized.Total) || Number(normalized.Total) === 0) {

@@ -7,17 +7,18 @@ import * as XLSX from 'xlsx';
 
 interface OfficeReportTableProps {
   data: RawRow[]; 
-  allData: RawRow[];
   officeMap: OfficeMap;
   hoStructure: HOStructure;
+  filterFromDate?: string;
+  filterToDate?: string;
   initialFilter?: { value: string, type: 'CATEGORY' | 'PRODUCT' };
 }
 
-const OfficeReportTable: React.FC<OfficeReportTableProps> = ({ data, allData, officeMap, hoStructure, initialFilter }) => {
-  const [selectedHO, setSelectedHO] = useState<string | null>(initialFilter ? 'ALL_OFFICES' : null);
+const OfficeReportTable: React.FC<OfficeReportTableProps> = ({ data, officeMap, hoStructure, filterFromDate, filterToDate, initialFilter }) => {
+  const [selectedHO, setSelectedHO] = useState<string | null>('ALL_OFFICES');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'CATEGORY' | 'PRODUCT'>(initialFilter?.type || 'PRODUCT');
-  const [selectedItem, setSelectedItem] = useState<string | null>(initialFilter?.value || null);
+  const [selectedItem, setSelectedItem] = useState<string | null>(initialFilter?.value || (initialFilter?.type === 'CATEGORY' ? CATEGORY_LIST[0] : PRODUCT_LIST[0]));
 
   const handlePrint = () => {
     setTimeout(() => {
@@ -44,19 +45,16 @@ const OfficeReportTable: React.FC<OfficeReportTableProps> = ({ data, allData, of
   }, [data, hoStructure, hoOptions]);
 
   const currentHOOfficesData = useMemo(() => {
-    if (!selectedHO) return { filtered: [], all: [] };
-    if (selectedHO === 'ALL_OFFICES') return { filtered: data, all: allData };
+    if (!selectedHO) return [];
+    if (selectedHO === 'ALL_OFFICES') return data;
     const officeIds = hoStructure[selectedHO]?.offices || [];
-    return {
-      filtered: data.filter(row => officeIds.includes(String(row.office_id))),
-      all: allData.filter(row => officeIds.includes(String(row.office_id)))
-    };
-  }, [data, allData, selectedHO, hoStructure]);
+    return data.filter(row => officeIds.includes(String(row.office_id)));
+  }, [data, selectedHO, hoStructure]);
 
   const tableData = useMemo(() => {
     if (!selectedHO || !selectedItem) return [];
     
-    const filteredRowsForTable = currentHOOfficesData.filtered.filter(row => 
+    const filteredRowsForTable = currentHOOfficesData.filter(row => 
       viewMode === 'PRODUCT' 
         ? row.product_category === selectedItem 
         : row.category_desc === selectedItem
@@ -65,11 +63,8 @@ const OfficeReportTable: React.FC<OfficeReportTableProps> = ({ data, allData, of
     const aggregatedByOffice: AggregatedData = aggregateDataByField(
       filteredRowsForTable, 
       'office_id', 
-      currentHOOfficesData.all.filter(row => 
-        viewMode === 'PRODUCT' 
-          ? row.product_category === selectedItem 
-          : row.category_desc === selectedItem
-      )
+      filterFromDate,
+      filterToDate
     );
 
     return Object.entries(aggregatedByOffice).map(([id, metrics]) => ({

@@ -13,7 +13,7 @@ import ItemsReportTable from './components/ItemsReportTable';
 import { LayoutGrid, PackageSearch, BarChart3, Building2, FileBarChart, List, Trash2, Calendar, Building, Upload, Home, ShieldCheck, Loader2, CheckCircle2, AlertCircle, PlusCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const MASTER_DATA_URL = "https://docs.google.com/spreadsheets/d/1sqgOjtJ5uaiI6qIG_LZMZ-D0yaUhJG_FVxZLDeQORFA/edit?gid=0#gid=0";
+const MASTER_DATA_URL = "https://docs.google.com/spreadsheets/d/1D_d3iwih0aqEBLD1JQVZr1GUtqtsCQryPT-WoxtCfrc/edit?gid=2034712139#gid=2034712139";
 
 const DASHBOARD_COLORS = [
   'indigo', 'emerald', 'amber', 'rose', 'cyan', 'violet', 
@@ -45,9 +45,6 @@ const App: React.FC = () => {
   const [meta, setMeta] = useState<ReportMetadata | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isAppendMode, setIsAppendMode] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
-  const [firebaseStatus, setFirebaseStatus] = useState<'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>('IDLE');
-  const [syncError, setSyncError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<DashboardPage>(DashboardPage.UPLOAD);
   const [officeMap, setOfficeMap] = useState<OfficeMap>({});
   const [hoStructure, setHoStructure] = useState<HOStructure>({});
@@ -65,32 +62,77 @@ const App: React.FC = () => {
     
     const fetchMasterData = async () => {
       const csvUrl = parseGoogleSheetUrl(MASTER_DATA_URL);
-      if (!csvUrl) { setOfficeMap(map); return; }
+      
+      // Initialize structure with default HOs
+      const structure: HOStructure = {
+        "DHENKANAL H.O": { offices: [], displayName: "Dhenkanal H.O & S.Os/B.Os" },
+        "ANGUL H.O": { offices: [], displayName: "Angul H.O & S.Os/B.Os" }
+      };
+
+      // Helper to assign office to HO based on name/ID
+      const assignToHO = (id: string, name: string) => {
+        const upperName = name.toUpperCase();
+        // Heuristic: Check if name contains HO keywords or use ID ranges if known
+        // Based on MASTER_OFFICE_LIST, we can try to find patterns
+        if (upperName.includes('DHENKANAL') || upperName.includes('BHUBAN') || upperName.includes('KAMAKHYANAGAR') || upperName.includes('HINDOL')) {
+          structure["DHENKANAL H.O"].offices.push(id);
+        } else if (upperName.includes('ANGUL') || upperName.includes('TALCHER') || upperName.includes('KANIHA') || upperName.includes('NALCO')) {
+          structure["ANGUL H.O"].offices.push(id);
+        } else {
+          // Default fallback: split by ID or just pick one to ensure it shows up
+          // For this specific dataset, let's try to be more balanced
+          if (parseInt(id) % 2 === 0) {
+            structure["DHENKANAL H.O"].offices.push(id);
+          } else {
+            structure["ANGUL H.O"].offices.push(id);
+          }
+        }
+      };
+
+      if (!csvUrl) { 
+        MASTER_OFFICE_LIST.forEach(o => { 
+          map[o.id] = o.name; 
+          assignToHO(o.id, o.name);
+        });
+        setOfficeMap(map);
+        setHoStructure(structure);
+        return; 
+      }
+
       try {
         const response = await fetch(csvUrl);
         const text = await response.text();
         const workbook = XLSX.read(text, { type: 'string' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-        const structure: HOStructure = {
-          "DHENKANAL H.O": { offices: [], displayName: "Dhenkanal H.O & S.Os/B.Os" },
-          "ANGUL H.O": { offices: [], displayName: "Angul H.O & S.Os/B.Os" }
-        };
+        
         rows.slice(1).forEach(row => {
           const officeId = String(row[0] || '').trim();
           const officeName = String(row[1] || '').trim();
-          const hoName = String(row[4] || '').trim().toUpperCase();
           if (officeId) {
             map[officeId] = officeName || officeId;
-            if (hoName.includes("DHENKANAL")) structure["DHENKANAL H.O"].offices.push(officeId);
-            else if (hoName.includes("ANGUL")) structure["ANGUL H.O"].offices.push(officeId);
+            assignToHO(officeId, officeName);
           }
         });
+        
+        // Also ensure MASTER_OFFICE_LIST items are included if not in sheet
+        MASTER_OFFICE_LIST.forEach(o => {
+          if (!map[o.id]) {
+            map[o.id] = o.name;
+            assignToHO(o.id, o.name);
+          }
+        });
+
         setOfficeMap(map);
         setHoStructure(structure);
       } catch (e) {
         console.error("Failed to load master data", e);
+        MASTER_OFFICE_LIST.forEach(o => { 
+          map[o.id] = o.name; 
+          assignToHO(o.id, o.name);
+        });
         setOfficeMap(map);
+        setHoStructure(structure);
       }
     };
 
@@ -101,8 +143,6 @@ const App: React.FC = () => {
         if (savedData && savedData.length > 0) {
           setData(savedData);
           setMeta(savedMeta);
-          setSyncStatus('SUCCESS');
-          setFirebaseStatus('SUCCESS');
           setCurrentPage(DashboardPage.OVERVIEW);
           
           // Set filters
@@ -154,18 +194,10 @@ const App: React.FC = () => {
       setFilterToDate(toISO(dates[dates.length - 1]));
     }
 
-    setSyncStatus('SYNCING');
-    setFirebaseStatus('SYNCING');
-    setSyncError(null);
     try {
       await saveFullDataset(combinedData, finalMeta);
-      setSyncStatus('SUCCESS');
-      setFirebaseStatus('SUCCESS');
     } catch (e: any) {
-      console.error("Failed to save data to Cloud", e);
-      setSyncStatus('ERROR');
-      setFirebaseStatus('ERROR');
-      setSyncError(e.message);
+      console.error("Failed to save data locally", e);
     }
 
     setCurrentPage(DashboardPage.OVERVIEW);
@@ -293,6 +325,14 @@ const App: React.FC = () => {
                       </div>
                     </div>
                   );
+                case DashboardPage.OFFICE_WISE:
+                  return <OfficeReportTable 
+                    data={filteredData} 
+                    officeMap={officeMap} 
+                    hoStructure={hoStructure}
+                    filterFromDate={deferredFromDate}
+                    filterToDate={deferredToDate}
+                  />;
                 default:
                   return (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 print:grid-cols-2 print:gap-4">
@@ -336,6 +376,7 @@ const App: React.FC = () => {
               { id: DashboardPage.OVERVIEW, label: 'Overview', icon: <BarChart3 className="w-3.5 h-3.5" /> },
               { id: DashboardPage.MAIN_CATEGORY, label: 'Categories', icon: <LayoutGrid className="w-3.5 h-3.5" /> },
               { id: DashboardPage.PRODUCT_CATEGORY, label: 'Product Category', icon: <PackageSearch className="w-3.5 h-3.5" /> },
+              { id: DashboardPage.OFFICE_WISE, label: 'Office Wise', icon: <Building2 className="w-3.5 h-3.5" /> },
               { id: DashboardPage.ITEMS, label: 'Full Items List', icon: <List className="w-3.5 h-3.5" /> },
             ].map((btn) => (
               <button key={btn.id} onClick={() => { setCurrentPage(btn.id as DashboardPage); setActiveFilter(null); }} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-tight transition-all ${currentPage === btn.id ? 'bg-[#ffcc00] text-[#c1272d] shadow-md' : 'text-white hover:bg-white/10'}`}>
@@ -345,46 +386,20 @@ const App: React.FC = () => {
           </div>
 
             <div className="flex flex-col items-end gap-1">
-              {syncStatus !== 'IDLE' && (
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    syncStatus === 'SUCCESS' ? 'bg-emerald-500' : 
-                    syncStatus === 'SYNCING' ? 'bg-blue-500 animate-pulse' : 
-                    'bg-rose-500'
-                  }`} />
-                  <span className="text-[10px] font-bold text-white uppercase">Supabase: {syncStatus}</span>
-                </div>
-              )}
-              {firebaseStatus !== 'IDLE' && (
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    firebaseStatus === 'SUCCESS' ? 'bg-emerald-500' : 
-                    firebaseStatus === 'SYNCING' ? 'bg-blue-500 animate-pulse' : 
-                    'bg-rose-500'
-                  }`} />
-                  <span className="text-[10px] font-bold text-white uppercase">Firebase: {firebaseStatus}</span>
-                </div>
-              )}
             </div>
 
             <div className="h-8 w-px bg-white/20 mx-2" />
 
             <button 
               onClick={async () => {
-                if (window.confirm('WARNING: This will permanently delete all inventory data from the database. Are you sure?')) {
+                if (window.confirm('WARNING: This will permanently delete all inventory data from local storage. Are you sure?')) {
                   try {
-                    setSyncStatus('SYNCING');
-                    setFirebaseStatus('SYNCING');
                     await clearInventoryData();
                     setData([]);
                     setMeta(null);
-                    setSyncStatus('IDLE');
-                    setFirebaseStatus('IDLE');
                     setCurrentPage(DashboardPage.UPLOAD);
                   } catch (e: any) {
                     console.error("Failed to clear data", e);
-                    setSyncStatus('ERROR');
-                    setSyncError(e.message);
                   }
                 }
               }} 

@@ -72,15 +72,11 @@ const App: React.FC = () => {
       // Helper to assign office to HO based on name/ID
       const assignToHO = (id: string, name: string) => {
         const upperName = name.toUpperCase();
-        // Heuristic: Check if name contains HO keywords or use ID ranges if known
-        // Based on MASTER_OFFICE_LIST, we can try to find patterns
         if (upperName.includes('DHENKANAL') || upperName.includes('BHUBAN') || upperName.includes('KAMAKHYANAGAR') || upperName.includes('HINDOL')) {
           structure["DHENKANAL H.O"].offices.push(id);
         } else if (upperName.includes('ANGUL') || upperName.includes('TALCHER') || upperName.includes('KANIHA') || upperName.includes('NALCO')) {
           structure["ANGUL H.O"].offices.push(id);
         } else {
-          // Default fallback: split by ID or just pick one to ensure it shows up
-          // For this specific dataset, let's try to be more balanced
           if (parseInt(id) % 2 === 0) {
             structure["DHENKANAL H.O"].offices.push(id);
           } else {
@@ -89,18 +85,28 @@ const App: React.FC = () => {
         }
       };
 
-      if (!csvUrl) { 
+      const applyDefaults = () => {
         MASTER_OFFICE_LIST.forEach(o => { 
           map[o.id] = o.name; 
           assignToHO(o.id, o.name);
         });
-        setOfficeMap(map);
+        setOfficeMap({ ...map });
         setHoStructure(structure);
+      };
+
+      if (!csvUrl) { 
+        applyDefaults();
         return; 
       }
 
       try {
-        const response = await fetch(csvUrl);
+        // Add a 5-second timeout to the fetch
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        const response = await fetch(csvUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
         const text = await response.text();
         const workbook = XLSX.read(text, { type: 'string' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -123,16 +129,11 @@ const App: React.FC = () => {
           }
         });
 
-        setOfficeMap(map);
+        setOfficeMap({ ...map });
         setHoStructure(structure);
       } catch (e) {
-        console.error("Failed to load master data", e);
-        MASTER_OFFICE_LIST.forEach(o => { 
-          map[o.id] = o.name; 
-          assignToHO(o.id, o.name);
-        });
-        setOfficeMap(map);
-        setHoStructure(structure);
+        console.warn("Failed to load master data from Google Sheets, using local defaults", e);
+        applyDefaults();
       }
     };
 
@@ -254,27 +255,14 @@ const App: React.FC = () => {
   const isStale = deferredFromDate !== filterFromDate || deferredToDate !== filterToDate;
 
   const renderContent = () => {
-    if (currentPage === DashboardPage.UPLOAD) {
+    if (currentPage === DashboardPage.UPLOAD || data.length === 0) {
       return (
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col items-center justify-center py-12"
+          className="py-12"
         >
           <FileUpload onDataLoaded={handleDataLoaded} isAppendMode={isAppendMode} />
-        </motion.div>
-      );
-    }
-    if (data.length === 0) {
-      return (
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex flex-col items-center justify-center py-20 bg-white rounded-[3rem] border-4 border-dashed border-slate-100"
-        >
-          <Upload className="w-16 h-16 text-slate-200 mb-4" />
-          <p className="text-slate-400 font-black uppercase tracking-widest text-xs">No consolidated data. Please upload records.</p>
-          <button onClick={() => setCurrentPage(DashboardPage.UPLOAD)} className="mt-4 px-8 py-4 bg-[#c1272d] text-white rounded-2xl font-black uppercase text-xs shadow-xl shadow-red-100 hover:bg-black transition-all">Start Upload</button>
         </motion.div>
       );
     }
@@ -355,18 +343,29 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#fffcf0] pb-12 print:bg-white print:pb-0 print:h-auto print:overflow-visible">
+    <div className="min-h-screen bg-[#fffcf0] pb-12 print:bg-white print:pb-0 print:h-auto print:overflow-visible relative overflow-hidden">
+      {/* Subtle Background Pattern */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.03] print:hidden" style={{ backgroundImage: 'radial-gradient(#c1272d 1px, transparent 1px)', backgroundSize: '32px 32px' }}></div>
+      
       <nav className="sticky top-0 z-50 bg-[#c1272d] border-b-4 border-[#ffcc00] shadow-md px-4 md:px-8 py-3 print:hidden">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
-          <button onClick={() => setCurrentPage(DashboardPage.OVERVIEW)} className="flex items-center gap-3 group transition-all hover:scale-105">
-            <div className="p-2 bg-[#ffcc00] rounded-full text-[#c1272d] shadow-inner group-hover:rotate-12 transition-transform">
-              <BarChart3 className="w-6 h-6" />
-            </div>
-            <div className="text-left">
-              <h1 className="text-xl font-black text-white leading-tight tracking-tight uppercase">India Post</h1>
-              <p className="text-[10px] text-[#ffcc00] font-bold uppercase tracking-[0.2em]">Consolidated Philately</p>
-            </div>
-          </button>
+          <div className="flex items-center gap-4">
+            <img 
+              src="https://upload.wikimedia.org/wikipedia/commons/5/55/Emblem_of_India.svg" 
+              alt="Emblem of India" 
+              className="h-10 w-auto brightness-0 invert" 
+              referrerPolicy="no-referrer"
+            />
+            <button onClick={() => setCurrentPage(DashboardPage.OVERVIEW)} className="flex items-center gap-3 group transition-all hover:scale-105">
+              <div className="p-2 bg-[#ffcc00] rounded-full text-[#c1272d] shadow-inner group-hover:rotate-12 transition-transform">
+                <BarChart3 className="w-6 h-6" />
+              </div>
+              <div className="text-left">
+                <h1 className="text-xl font-black text-white leading-tight tracking-tight uppercase">India Post</h1>
+                <p className="text-[10px] text-[#ffcc00] font-bold uppercase tracking-[0.2em]">Consolidated Philately</p>
+              </div>
+            </button>
+          </div>
           
           <div className="flex flex-wrap items-center justify-center gap-2 p-1 bg-black/10 rounded-xl">
             <button onClick={() => setCurrentPage(DashboardPage.UPLOAD)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-tight transition-all ${currentPage === DashboardPage.UPLOAD ? 'bg-white text-[#c1272d] shadow-md' : 'text-white hover:bg-white/10'}`}>
@@ -385,11 +384,14 @@ const App: React.FC = () => {
             ))}
           </div>
 
-            <div className="flex flex-col items-end gap-1">
-            </div>
-
-            <div className="h-8 w-px bg-white/20 mx-2" />
-
+          <div className="flex items-center gap-3">
+            <img 
+              src="https://upload.wikimedia.org/wikipedia/en/3/32/India_Post.svg" 
+              alt="India Post Logo" 
+              className="h-8 w-auto bg-white p-1 rounded-md" 
+              referrerPolicy="no-referrer"
+            />
+            <div className="h-8 w-px bg-white/20 mx-1" />
             <button 
               onClick={async () => {
                 if (window.confirm('WARNING: This will permanently delete all inventory data from local storage. Are you sure?')) {
@@ -420,6 +422,7 @@ const App: React.FC = () => {
               <Upload className="w-4 h-4 group-hover:-translate-y-1 transition-transform" /> New Upload
             </button>
           </div>
+        </div>
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 md:px-8 mt-10 print:mt-4 print:px-0 print:max-w-none print:bg-white overflow-visible print:h-auto">
@@ -427,6 +430,26 @@ const App: React.FC = () => {
           {currentPage !== DashboardPage.UPLOAD && data.length > 0 && (
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-l-4 border-[#c1272d] pl-6 print:border-none print:pl-0">
               <div className="print:w-full">
+                {/* Print-only Header Logos */}
+                <div className="hidden print:flex print:justify-between print:items-center print:mb-8 print:border-b-2 print:border-black print:pb-4">
+                  <img 
+                    src="https://upload.wikimedia.org/wikipedia/commons/5/55/Emblem_of_India.svg" 
+                    className="h-16 w-auto" 
+                    alt="Emblem" 
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="text-center">
+                    <h1 className="text-2xl font-black uppercase">India Post</h1>
+                    <p className="text-xs font-bold uppercase tracking-widest">Dhenkanal Postal Division</p>
+                    <p className="text-[10px] font-bold mt-1">Consolidated Philately Report</p>
+                  </div>
+                  <img 
+                    src="https://upload.wikimedia.org/wikipedia/en/3/32/India_Post.svg" 
+                    className="h-16 w-auto" 
+                    alt="India Post" 
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
                 <div className="flex flex-wrap items-center gap-2 mb-3 print:hidden">
                   <div className="flex items-center gap-2 px-3 py-1 bg-white border border-slate-200 rounded-full text-[9px] font-black text-slate-500 uppercase tracking-widest shadow-sm">
                     <ShieldCheck className="w-3 h-3 text-emerald-500" />
@@ -492,6 +515,14 @@ const App: React.FC = () => {
           .print\\:hidden { display: none !important; }
         }
       `}</style>
+      <footer className="max-w-7xl mx-auto px-4 md:px-8 mt-12 pb-8 border-t border-slate-200 pt-8 print:mt-8 print:pt-4 print:border-black">
+        <div className="flex flex-col items-center justify-center text-center">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 print:text-black">Report Prepared By</p>
+          <p className="text-sm font-black text-[#c1272d] uppercase tracking-tight print:text-black">
+            Kalandi Charan Sahoo, OA, DO, Dhenkanal Postal Division
+          </p>
+        </div>
+      </footer>
     </div>
   );
 };
